@@ -321,7 +321,8 @@
       font-size: 13px;
     }
 
-    .runs-label select {
+    .runs-label select, .runs-label input {
+      width: 4.5rem;
       padding: 6px 8px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -450,12 +451,11 @@
           <p id="key-info" hidden></p>
         </div>
         <div class="toolbar-actions">
-          <label class="runs-label">Runs
-            <select id="runs">
-              <option value="1">1</option>
-              <option value="3" selected>3</option>
-              <option value="5">5</option>
-            </select>
+          <label class="runs-label">Requests
+            <input id="requests" type="number" min="1" max="50" value="5" />
+          </label>
+          <label class="runs-label">At once
+            <input id="concurrency" type="number" min="1" max="20" value="5" />
           </label>
           <button id="prompt-allowed" type="button" disabled>Prompt allowed</button>
           <button id="retry-failed" type="button" disabled>Retry failed</button>
@@ -484,7 +484,8 @@
     const masterPreview = document.querySelector("#master-key-preview");
     const accessPreview = document.querySelector("#access-key-preview");
     const keyInfo = document.querySelector("#key-info");
-    const runsInput = document.querySelector("#runs");
+    const requestsInput = document.querySelector("#requests");
+    const concurrencyInput = document.querySelector("#concurrency");
     const promptAllowedButton = document.querySelector("#prompt-allowed");
     const retryButton = document.querySelector("#retry-failed");
     const exportButton = document.querySelector("#export");
@@ -1046,9 +1047,10 @@
       return { token: master, label: "the master key" };
     }
 
-    function selectedRuns() {
-      const count = Number(runsInput.value);
-      return count >= 1 && count <= 5 ? count : 3;
+    function selectedNumber(input, fallback, max) {
+      const count = Number(input.value);
+      if (Number.isInteger(count) && count >= 1 && count <= max) return count;
+      return fallback;
     }
 
     function formatKeyInfo(info) {
@@ -1071,7 +1073,8 @@
       const median = format(stat.median);
       const max = format(stat.max);
       if (min === max) return median;
-      return `min ${min} · median ${median} · max ${max}`;
+      const p95 = stat.p95 == null ? "" : ` · p95 ${format(stat.p95)}`;
+      return `min ${min} · median ${median}${p95} · max ${max}`;
     }
 
     function statBox(label, value, range) {
@@ -1087,7 +1090,19 @@
       const box = card.querySelector(".perf");
       box.hidden = false;
       box.replaceChildren();
-      box.append(el("p", "perf-note", `Measured with ${keyLabel}.`));
+      const sent = result.requests || (result.samples || []).length;
+      const atOnce = result.concurrency || sent;
+      const failed = result.failed || 0;
+      const succeeded = result.succeeded == null ? sent - failed : result.succeeded;
+      const burst = [
+        `Measured with ${keyLabel}`,
+        `${sent} request${sent === 1 ? "" : "s"}, ${atOnce} at a time`,
+        `${succeeded} succeeded`,
+      ];
+      if (failed) burst.push(`${failed} failed`);
+      if (result.wall_ms != null) burst.push(formatMs(result.wall_ms));
+      if (result.requests_per_second != null) burst.push(`${result.requests_per_second} requests/s`);
+      box.append(el("p", "perf-note", burst.join(" · ")));
       if (!result.summary) {
         const prefix = result.http_status ? `${result.http_status} · ` : "";
         box.append(el("p", "body", prefix + (result.error || "Performance test failed.")));
@@ -1118,12 +1133,15 @@
           formatRange(summary.tokens_per_second, formatSpeed),
         ));
       }
-      const runs = (result.samples || []).map((sample, index) => {
-        if (sample.error) return `run ${index + 1} failed`;
-        if (embedding || sample.ttft_ms == null) return formatMs(sample.total_ms);
-        return `first token ${formatMs(sample.ttft_ms)}`;
-      });
-      if (runs.length) box.append(el("p", "perf-note", `Runs: ${runs.join(", ")}`));
+      const samples = result.samples || [];
+      if (samples.length <= 8) {
+        const runs = samples.map((sample, index) => {
+          if (sample.error) return `run ${index + 1} failed`;
+          if (embedding || sample.ttft_ms == null) return formatMs(sample.total_ms);
+          return `first token ${formatMs(sample.ttft_ms)}`;
+        });
+        if (runs.length) box.append(el("p", "perf-note", `Runs: ${runs.join(", ")}`));
+      }
       if (result.run_error) box.append(el("p", "perf-note", result.run_error));
       if (!embedding && !result.streamed) {
         box.append(el("p", "perf-note", "This model did not stream, so time to first token is the full response."));
@@ -1217,9 +1235,11 @@
       }
       const model = models.find((item) => item.id === modelIdToTest);
       const { id, signal } = begin("perf");
+      const requests = selectedNumber(requestsInput, 5, 50);
+      const concurrency = selectedNumber(concurrencyInput, requests, 20);
       const measuring = model && isEmbedding(model)
-        ? `Measuring embedding latency with ${key.label}…`
-        : `Measuring time to first token with ${key.label}…`;
+        ? `Sending ${requests} embedding requests, ${Math.min(concurrency, requests)} at a time, with ${key.label}…`
+        : `Sending ${requests} requests, ${Math.min(concurrency, requests)} at a time, with ${key.label}…`;
       showPerfPending(modelIdToTest, measuring);
       try {
         const result = await postJSON("/api/perf", {
@@ -1227,7 +1247,8 @@
           token: key.token,
           model: modelIdToTest,
           prompt,
-          runs: selectedRuns(),
+          runs: requests,
+          concurrency,
         }, signal);
         if (signal.aborted) return;
         renderPerf(modelIdToTest, result, key.label);

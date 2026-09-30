@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -21,6 +23,8 @@ from urllib.parse import quote, urlparse
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 MAX_MODELS = 40
+MAX_PERF_REQUESTS = 50
+MAX_PERF_CONCURRENCY = 20
 DEFAULT_PORT = 8787
 
 
@@ -517,7 +521,14 @@ def _stat(values: list[float]) -> dict | None:
         median = ordered[count // 2]
     else:
         median = (ordered[count // 2 - 1] + ordered[count // 2]) / 2
-    return {"min": ordered[0], "median": median, "max": ordered[-1]}
+    p95_index = min(count - 1, max(0, math.ceil(0.95 * count) - 1))
+    return {
+        "min": ordered[0],
+        "median": median,
+        "mean": sum(ordered) / count,
+        "p95": ordered[p95_index],
+        "max": ordered[-1],
+    }
 
 
 def _round_stat(stat: dict | None, digits: int) -> dict | None:
@@ -755,19 +766,33 @@ def chat_once(base: str, token: str, model: str, prompt: str) -> dict:
     )
 
 
-def performance_test(endpoint: object, token: object, model: object, prompt: object, runs: object) -> dict:
+def _positive_int(value: object, label: str, upper: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be a whole number from 1 to {upper}") from exc
+    if number < 1 or number > upper:
+        raise ValueError(f"{label} must be a whole number from 1 to {upper}")
+    return number
+
+
+def performance_test(
+    endpoint: object,
+    token: object,
+    model: object,
+    prompt: object,
+    runs: object,
+    concurrency: object = None,
+) -> dict:
     base = normalize_base(endpoint)
     secret = clean_token(token)
     if not isinstance(model, str) or not model.strip():
         raise ValueError("Model is required")
     if not isinstance(prompt, str) or not prompt.strip():
         raise ValueError("Prompt is required")
-    try:
-        count = int(runs)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("Runs must be a number from 1 to 5") from exc
-    if count < 1 or count > 5:
-        raise ValueError("Runs must be a number from 1 to 5")
+    count = _positive_int(runs, "Requests", MAX_PERF_REQUESTS)
+    workers = count if concurrency is None else _positive_int(concurrency, "At once", MAX_PERF_CONCURRENCY)
+    workers = min(workers, count)
     model_id = model.strip()
     text = prompt.strip()
     if len(model_id) > 300:
@@ -775,17 +800,24 @@ def performance_test(endpoint: object, token: object, model: object, prompt: obj
     if len(text) > 8000:
         raise ValueError("Prompt is too long")
 
-    samples = []
-    failure = None
-    for _ in range(count):
-        sample = chat_once(base, secret, model_id, text)
-        samples.append(sample)
-        if not sample["ok"]:
-            failure = sample
-            break
+    samples: list[dict | None] = [None] * count
+    batch_started = time.perf_counter()
 
-    successes = [sample for sample in samples if sample["ok"]]
-    kind = samples[-1]["kind"] if samples else "chat"
+    def run_one() -> dict:
+        try:
+            return chat_once(base, secret, model_id, text)
+        except Exception as exc:
+            return _sample(False, "error", time.perf_counter(), error=str(exc))
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(run_one): index for index in range(count)}
+        for future in as_completed(futures):
+            samples[futures[future]] = future.result()
+    wall_ms = elapsed_ms(batch_started)
+    finished = [sample for sample in samples if sample is not None]
+    successes = [sample for sample in finished if sample["ok"]]
+    failures = [sample for sample in finished if not sample["ok"]]
+    kind = finished[-1]["kind"] if finished else "chat"
     summary = None
     if successes:
         summary = {
@@ -800,7 +832,13 @@ def performance_test(endpoint: object, token: object, model: object, prompt: obj
                 0,
             ),
         }
+    failure = failures[0] if failures else None
+    run_error = None
+    if failures:
+        message = failure.get("error") or "Request failed"
+        run_error = f"{len(failures)} failed: {message}" if len(failures) > 1 else message
     last_success = successes[-1] if successes else None
+    requests_per_second = round(len(finished) / (wall_ms / 1000), 2) if wall_ms else None
     return {
         "model": model_id,
         "access": "allowed" if successes else (failure["access"] if failure else "error"),
@@ -809,8 +847,14 @@ def performance_test(endpoint: object, token: object, model: object, prompt: obj
         "streamed": any(sample["streamed"] for sample in successes),
         "response": last_success["response"] if last_success else None,
         "reported_model": last_success["reported_model"] if last_success else None,
-        "error": None if failure is None or successes else failure.get("error"),
-        "run_error": failure.get("error") if failure and successes else None,
+        "error": None if successes else (failure.get("error") if failure else "Request failed"),
+        "run_error": run_error if successes else None,
+        "requests": count,
+        "concurrency": workers,
+        "succeeded": len(successes),
+        "failed": len(failures),
+        "wall_ms": wall_ms,
+        "requests_per_second": requests_per_second,
         "samples": [
             {
                 "ttft_ms": sample["ttft_ms"],
@@ -819,7 +863,7 @@ def performance_test(endpoint: object, token: object, model: object, prompt: obj
                 "tokens_per_second": sample["tokens_per_second"],
                 "error": sample["error"],
             }
-            for sample in samples
+            for sample in finished
         ],
         "summary": summary,
     }
@@ -870,6 +914,7 @@ class Handler(BaseHTTPRequestHandler):
                         data.get("model", ""),
                         data.get("prompt", ""),
                         data.get("runs", 3),
+                        data.get("concurrency"),
                     ),
                 )
                 return
