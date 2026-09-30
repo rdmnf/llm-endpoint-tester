@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 248" role="img" aria-labelledby="title desc">
   <title id="title">What the LiteLLM model tester does</title>
   <desc id="desc">A master key lists models. A second key is checked against that list. One model can be prompted or timed for time to first token, total time, and output speed.</desc>
@@ -5,7 +6,7 @@
   <text x="24" y="36" fill="#1f1a14" font-family="Avenir Next, Segoe UI, sans-serif" font-size="16" font-weight="700">What this page does</text>
   <g font-family="Avenir Next, Segoe UI, sans-serif" fill="#1f1a14">
     <rect x="24" y="58" width="230" height="118" rx="12" fill="#f6f1e8" stroke="#e4d9c8"/>
-    <text x="40" y="86" font-size="13" font-weight="700" fill="#1f6b4a">1 · Master key</text>
+    <text x="40" y="86" font-size="13" font-weight="700" fill="#1f6b4a">1. Master key</text>
     <text x="40" y="112" font-size="13">Lists every model</text>
     <text x="40" y="132" font-size="13">that key can see</text>
     <text x="40" y="156" font-size="12" fill="#6f675e">Endpoint + master key</text>
@@ -14,7 +15,7 @@
     <path d="M284 110l8 7-8 7" fill="#1f6b4a"/>
 
     <rect x="302" y="58" width="250" height="118" rx="12" fill="#f6f1e8" stroke="#e4d9c8"/>
-    <text x="318" y="86" font-size="13" font-weight="700" fill="#1f6b4a">2 · Another key</text>
+    <text x="318" y="86" font-size="13" font-weight="700" fill="#1f6b4a">2. Another key</text>
     <text x="318" y="112" font-size="13">Marks which models</text>
     <text x="318" y="132" font-size="13">this key can call</text>
     <text x="318" y="156" font-size="12" fill="#6f675e">Paste or upload the key</text>
@@ -23,10 +24,10 @@
     <path d="M582 110l8 7-8 7" fill="#1f6b4a"/>
 
     <rect x="600" y="58" width="256" height="118" rx="12" fill="#e7f5ee" stroke="#c9e6d8"/>
-    <text x="616" y="86" font-size="13" font-weight="700" fill="#0d5a40">3 · One model</text>
+    <text x="616" y="86" font-size="13" font-weight="700" fill="#0d5a40">3. One model</text>
     <text x="616" y="112" font-size="13">Send the sample prompt</text>
     <text x="616" y="132" font-size="13">or time the response</text>
-    <text x="616" y="156" font-size="12" fill="#0d5a40">First token · total time · tok/s</text>
+    <text x="616" y="156" font-size="12" fill="#0d5a40">First token, total time, tok/s</text>
   </g>
   <text x="24" y="214" fill="#6f675e" font-family="Avenir Next, Segoe UI, sans-serif" font-size="13">Keys stay in the browser and are forwarded only to the endpoint you enter. They are not saved.</text>
 </svg>

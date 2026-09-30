@@ -2,7 +2,7 @@
 
 A local page for checking a [LiteLLM](https://docs.litellm.ai/) proxy. A master key loads the model list. A second key is compared with that list. Any one model can be prompted, or timed for time to first token, total time, and output speed.
 
-![What the tester does](flow.svg)
+![What the tester does](flow.png)
 
 ## What you can do
 
