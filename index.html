@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <title>LiteLLM model tester</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231f6b4a'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3efe6;
+      --surface: #fffcf7;
+      --ink: #1f1a14;
+      --muted: #6f675e;
+      --line: #e4d9c8;
+      --accent: #1f6b4a;
+      --accent-ink: #ffffff;
+      --accent-press: #184f37;
+      --allowed: #e7f5ee;
+      --allowed-ink: #0d5a40;
+      --denied: #f8e7e3;
+      --denied-ink: #8d2c22;
+      --failed: #f8efd6;
+      --failed-ink: #7a5608;
+      --neutral: #ece6db;
+      --neutral-ink: #5c564c;
+      --shadow: 0 16px 40px rgba(70, 48, 20, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 400px at 10% -10%, rgba(31, 107, 74, 0.08), transparent 55%),
+        var(--bg);
+      color: var(--ink);
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    button, input, textarea, select { font: inherit; color: inherit; }
+
+    .wrap {
+      width: min(880px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 40px 0 72px;
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+
+    header p {
+      margin: 0;
+      max-width: 62ch;
+      color: var(--muted);
+    }
+
+    .flow {
+      margin: 22px 0 0;
+    }
+
+    .flow img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+
+    form, .panel, .results-head, .card, .banner, .empty {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    form, .panel { margin-top: 16px; padding: 18px; }
+    form { margin-top: 28px; }
+
+    .panel h2 {
+      margin: 0 0 4px;
+      font-size: 18px;
+    }
+
+    .panel > .hint { margin-top: 0; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 14px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .field { min-width: 0; }
+
+    .prompt, .check-key { margin-top: 14px; }
+
+    input, textarea {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    textarea { min-height: 84px; resize: vertical; }
+
+    .token-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .show-token {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 16px;
+      cursor: pointer;
+    }
+
+    button:disabled { cursor: progress; opacity: 0.7; }
+
+    .primary {
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-weight: 650;
+    }
+
+    .primary:hover:not(:disabled) { background: var(--accent-press); }
+
+    #stop, .file-button {
+      background: transparent;
+      border: 1px solid var(--line);
+    }
+
+    .file-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .file-button {
+      display: inline-flex;
+      border-radius: 999px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    #file-name {
+      color: var(--muted);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .hint {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .banner {
+      margin-top: 16px;
+      padding: 12px 14px;
+      color: var(--denied-ink);
+      background: var(--denied);
+      box-shadow: none;
+    }
+
+    .empty, .results-head { margin-top: 22px; padding: 16px 18px; }
+
+    .empty { color: var(--muted); }
+
+    .results-head h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    #summary, #note {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    #results {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .card { padding: 14px 16px; box-shadow: none; }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .model-id {
+      margin: 0;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 15px;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+    }
+
+    .card-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      flex: none;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      background: var(--neutral);
+      color: var(--neutral-ink);
+    }
+
+    .pill[data-access="allowed"] { background: var(--allowed); color: var(--allowed-ink); }
+    .pill[data-access="denied"] { background: var(--denied); color: var(--denied-ink); }
+    .pill[data-access="error"], .pill[data-access="stopped"] {
+      background: var(--failed);
+      color: var(--failed-ink);
+    }
+    .pill[data-access="running"] { animation: pulse 1.1s ease-in-out infinite; }
+
+    .timing {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .tag, .body, .reported { margin: 10px 0 0; }
+
+    .tag, .reported { color: var(--muted); font-size: 13px; }
+
+    .body {
+      padding: 12px;
+      border-radius: 10px;
+      background: #f6f1e8;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 14.5px;
+    }
+
+    .key-preview, .facts, .perf-note {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .results-toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .toolbar-actions, .card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .toolbar-actions { justify-content: flex-end; }
+    .card-actions { margin-top: 10px; }
+
+    .toolbar-actions button, .card-actions button {
+      background: transparent;
+      border: 1px solid var(--line);
+      padding: 8px 12px;
+    }
+
+    .runs-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .runs-label select {
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .perf {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .stat {
+      background: #f6f1e8;
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+
+    .stat span, .stat small { display: block; color: var(--muted); font-size: 12px; }
+    .stat b { display: block; margin: 2px 0; font-size: 16px; }
+
+    #key-info { margin: 8px 0 0; font-size: 14px; }
+
+    .card[data-access="denied"] .body { background: var(--denied); }
+    .card[data-access="error"] .body,
+    .card[data-access="stopped"] .body { background: var(--failed); }
+
+    footer {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    @keyframes pulse {
+      50% { opacity: 0.55; }
+    }
+
+    @media (max-width: 700px) {
+      .grid, .card-top { grid-template-columns: 1fr; }
+      .card-top { flex-direction: column; }
+      .card-meta, .timing { align-items: flex-start; text-align: left; }
+      .actions, .results-toolbar { flex-direction: column; }
+      .perf { grid-template-columns: 1fr; }
+      header h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>LiteLLM model tester</h1>
+      <p>Use a master key to list every model on the proxy. Then upload or paste another key to see which of those models it can call.</p>
+      <figure class="flow">
+        <img src="/flow.svg" alt="A master key lists models. A second key is checked for access. One model can be prompted or timed for first token, total time, and output speed." />
+      </figure>
+    </header>
+
+    <form id="list-form">
+      <div class="grid">
+        <div class="field">
+          <label for="endpoint">Endpoint</label>
+          <input id="endpoint" name="endpoint" type="text" spellcheck="false" autocomplete="off" value="https://llm.ecda.ai" required />
+        </div>
+        <div class="field">
+          <div class="token-row">
+            <label for="master-key">Master API key</label>
+            <label class="show-token">
+              <input id="show-master-key" type="checkbox" />
+              Show
+            </label>
+          </div>
+          <input id="master-key" name="master-key" type="password" spellcheck="false" autocomplete="off" placeholder="Paste the master key" required />
+          <p id="master-key-preview" class="key-preview"></p>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="stop" type="button" hidden>Stop</button>
+        <button id="list-models" class="primary" type="submit">List models</button>
+      </div>
+      <p class="hint">The master key is used only to load the model list. It is not saved.</p>
+    </form>
+
+    <section class="panel" id="check-panel">
+      <h2>Check another key</h2>
+      <p class="hint">Upload a file that contains the key, or paste it. Check access compares model lists. Prompt and time-to-first-token run on the model you choose.</p>
+        <div class="field check-key">
+        <div class="token-row">
+          <label for="access-key">Key to test</label>
+          <label class="show-token">
+            <input id="show-access-key" type="checkbox" />
+            Show
+          </label>
+        </div>
+        <input id="access-key" name="access-key" type="password" spellcheck="false" autocomplete="off" placeholder="Paste a virtual key" />
+        <p id="access-key-preview" class="key-preview"></p>
+        <div class="file-row">
+          <label class="file-button" for="key-file">Upload key file</label>
+          <input id="key-file" type="file" accept=".txt,.key,.env,.json,text/plain,application/json" hidden />
+          <span id="file-name"></span>
+        </div>
+      </div>
+      <div class="field prompt">
+        <label for="prompt">Sample prompt</label>
+        <textarea id="prompt" name="prompt">Hey What's up, which model are you?</textarea>
+      </div>
+      <div class="actions">
+        <button id="check" class="primary" type="button" disabled>Check access</button>
+      </div>
+    </section>
+
+    <p id="banner" class="banner" hidden role="alert"></p>
+    <p id="empty" class="empty">List models with the master key. Then check another key against that list.</p>
+
+    <section id="results-head" class="results-head" hidden>
+      <div class="results-toolbar">
+        <div>
+          <h2>Models</h2>
+          <p id="summary" aria-live="polite"></p>
+          <p id="note"></p>
+          <p id="key-info" hidden></p>
+        </div>
+        <div class="toolbar-actions">
+          <label class="runs-label">Runs
+            <select id="runs">
+              <option value="1">1</option>
+              <option value="3" selected>3</option>
+              <option value="5">5</option>
+            </select>
+          </label>
+          <button id="prompt-allowed" type="button" disabled>Prompt allowed</button>
+          <button id="retry-failed" type="button" disabled>Retry failed</button>
+          <button id="export" type="button" disabled>Export JSON</button>
+        </div>
+      </div>
+    </section>
+    <div id="results"></div>
+
+    <footer>Runs on this computer at 127.0.0.1. Keys stay in this page and are sent only to the endpoint you enter.</footer>
+  </main>
+
+  <script>
+    const listForm = document.querySelector("#list-form");
+    const endpointInput = document.querySelector("#endpoint");
+    const masterKeyInput = document.querySelector("#master-key");
+    const accessKeyInput = document.querySelector("#access-key");
+    const keyFileInput = document.querySelector("#key-file");
+    const fileName = document.querySelector("#file-name");
+    const promptInput = document.querySelector("#prompt");
+    const showMasterKey = document.querySelector("#show-master-key");
+    const showAccessKey = document.querySelector("#show-access-key");
+    const listButton = document.querySelector("#list-models");
+    const checkButton = document.querySelector("#check");
+    const stopButton = document.querySelector("#stop");
+    const masterPreview = document.querySelector("#master-key-preview");
+    const accessPreview = document.querySelector("#access-key-preview");
+    const keyInfo = document.querySelector("#key-info");
+    const runsInput = document.querySelector("#runs");
+    const promptAllowedButton = document.querySelector("#prompt-allowed");
+    const retryButton = document.querySelector("#retry-failed");
+    const exportButton = document.querySelector("#export");
+    const banner = document.querySelector("#banner");
+    const empty = document.querySelector("#empty");
+    const resultsHead = document.querySelector("#results-head");
+    const summary = document.querySelector("#summary");
+    const note = document.querySelector("#note");
+    const results = document.querySelector("#results");
+
+    const ACCESS_LABEL = {
+      listed: "Listed",
+      checking: "Checking",
+      running: "Testing",
+      allowed: "Has access",
+      denied: "No access",
+      error: "Failed",
+      stopped: "Stopped",
+    };
+
+    const cards = new Map();
+    const records = new Map();
+    let masterModels = [];
+    let models = [];
+    let runId = 0;
+    let abortController = null;
+    let busy = false;
+
+    if (location.protocol === "file:") {
+      setBanner("Open this page from the local server: python3 server.py, then http://127.0.0.1:8787");
+    }
+
+    showMasterKey.addEventListener("change", () => {
+      masterKeyInput.type = showMasterKey.checked ? "text" : "password";
+    });
+
+    showAccessKey.addEventListener("change", () => {
+      accessKeyInput.type = showAccessKey.checked ? "text" : "password";
+    });
+
+    keyFileInput.addEventListener("change", async () => {
+      const file = keyFileInput.files && keyFileInput.files[0];
+      if (!file) return;
+      try {
+        accessKeyInput.value = extractKey(await file.text());
+        fileName.textContent = file.name;
+        refreshKeyPreviews();
+        setBanner("");
+      } catch (error) {
+        accessKeyInput.value = "";
+        fileName.textContent = "";
+        refreshKeyPreviews();
+        setBanner(error.message);
+      }
+    });
+
+    listForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      startList();
+    });
+
+    checkButton.addEventListener("click", () => {
+      startCheck();
+    });
+
+    stopButton.addEventListener("click", () => {
+      abortController?.abort();
+    });
+
+    endpointInput.addEventListener("input", invalidateList);
+    masterKeyInput.addEventListener("input", () => {
+      refreshKeyPreviews();
+      invalidateList();
+    });
+    accessKeyInput.addEventListener("input", refreshKeyPreviews);
+
+    promptAllowedButton.addEventListener("click", () => startPromptAllowed());
+    retryButton.addEventListener("click", () => startRetry());
+    exportButton.addEventListener("click", exportResults);
+    results.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button || busy) return;
+      const card = button.closest(".card");
+      const id = card && card.querySelector(".model-id") && card.querySelector(".model-id").textContent;
+      if (!id) return;
+      if (button.dataset.action === "prompt") startPrompt([id]);
+      if (button.dataset.action === "perf") startPerf(id);
+    });
+
+    function setBanner(message) {
+      banner.hidden = !message;
+      banner.textContent = message || "";
+    }
+
+    function setBusy(mode) {
+      busy = mode !== null;
+      listButton.disabled = busy;
+      checkButton.disabled = busy || masterModels.length === 0;
+      stopButton.hidden = !busy;
+      listButton.textContent = mode === "list" ? "Loading…" : "List models";
+      checkButton.textContent = mode === "check" ? "Checking…" : "Check access";
+      refreshActions();
+    }
+
+    function refreshKeyPreviews() {
+      masterPreview.textContent = describeKey(masterKeyInput.value);
+      accessPreview.textContent = describeKey(accessKeyInput.value);
+    }
+
+    function describeKey(token) {
+      const clean = stripBearer(token);
+      if (!clean) return "";
+      const tail = clean.length >= 4 ? clean.slice(-4) : clean;
+      return `${clean.length} characters, ends in ${tail}`;
+    }
+
+    function refreshActions() {
+      const accesses = models.map((model) => {
+        const card = cards.get(model.id);
+        return card ? card.dataset.access : "";
+      });
+      promptAllowedButton.disabled = busy || !accesses.includes("allowed");
+      retryButton.disabled = busy || !accesses.some((access) => access === "error" || access === "stopped");
+      exportButton.disabled = models.length === 0;
+    }
+
+    function invalidateList() {
+      if (busy) return;
+      masterModels = [];
+      models = [];
+      records.clear();
+      cards.clear();
+      results.replaceChildren();
+      resultsHead.hidden = true;
+      keyInfo.hidden = true;
+      empty.hidden = false;
+      empty.textContent = "List models with the master key. Then check another key, or time a single model.";
+      checkButton.disabled = true;
+      refreshActions();
+    }
+
+    function stripBearer(value) {
+      const token = value.trim();
+      return token.toLowerCase().startsWith("bearer ") ? token.slice(7).trim() : token;
+    }
+
+    function extractKey(text) {
+      const trimmed = text.trim();
+      if (!trimmed) throw new Error("That file does not contain a key.");
+      if (trimmed.startsWith("{")) {
+        try {
+          const data = JSON.parse(trimmed);
+          for (const field of ["api_key", "apiKey", "token", "key"]) {
+            if (typeof data[field] === "string" && data[field].trim()) return stripBearer(data[field]);
+          }
+        } catch {
+          // A file that starts with "{" can still be plain text.
+        }
+      }
+      for (const line of trimmed.split(/\r?\n/)) {
+        const value = line.trim();
+        if (!value || value.startsWith("#")) continue;
+        const separator = value.indexOf("=");
+        const raw = separator === -1 ? value : value.slice(separator + 1).trim();
+        const token = stripBearer(raw.replace(/^['"]|['"]$/g, ""));
+        if (token) return token;
+      }
+      throw new Error("That file does not contain a key.");
+    }
+
+    function keyHint(token) {
+      const clean = stripBearer(token);
+      if (clean.length < 8) return "this key";
+      return `the key ending in ${clean.slice(-4)}`;
+    }
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text != null) node.textContent = text;
+      return node;
+    }
+
+    function formatMs(ms) {
+      if (ms == null || Number.isNaN(Number(ms))) return "";
+      const value = Number(ms);
+      if (value < 1000) return `${Math.round(value)} ms`;
+      return `${(value / 1000).toFixed(1)} s`;
+    }
+
+    function copyModel(model) {
+      return {
+        id: model.id,
+        mode: model.mode || "",
+        provider: model.provider || "",
+        max_input_tokens: model.max_input_tokens ?? null,
+        max_output_tokens: model.max_output_tokens ?? null,
+      };
+    }
+
+    function isEmbedding(model) {
+      return model.mode === "embedding" || model.id.toLowerCase().includes("embed");
+    }
+
+    function factsText(model) {
+      const bits = [];
+      if (model.mode) bits.push(model.mode);
+      if (model.provider) bits.push(model.provider);
+      if (model.max_input_tokens) bits.push(`context ${model.max_input_tokens}`);
+      if (model.max_output_tokens) bits.push(`output ${model.max_output_tokens}`);
+      return bits.join(" · ");
+    }
+
+    function createCard(model) {
+      const card = el("article", "card");
+      card.dataset.access = "listed";
+      const top = el("div", "card-top");
+      top.append(el("h3", "model-id", model.id));
+      const meta = el("div", "card-meta");
+      const pill = el("span", "pill", ACCESS_LABEL.listed);
+      pill.dataset.access = "listed";
+      meta.append(pill, el("span", "timing"));
+      top.append(meta);
+      card.append(top);
+      const facts = factsText(model);
+      if (facts) card.append(el("p", "facts", facts));
+      const actions = el("div", "card-actions");
+      const promptButton = el("button", "", "Prompt");
+      promptButton.type = "button";
+      promptButton.dataset.action = "prompt";
+      const perfButton = el("button", "", isEmbedding(model) ? "Measure latency" : "Time to first token");
+      perfButton.type = "button";
+      perfButton.dataset.action = "perf";
+      actions.append(promptButton, perfButton);
+      const body = el("p", "body");
+      body.hidden = true;
+      const reported = el("p", "reported");
+      reported.hidden = true;
+      const perf = el("div", "perf");
+      perf.hidden = true;
+      card.append(actions, body, reported, perf);
+      return card;
+    }
+
+    function renderModels(nextModels, truncated) {
+      masterModels = nextModels.map(copyModel);
+      models = masterModels.map(copyModel);
+      records.clear();
+      cards.clear();
+      results.replaceChildren();
+      empty.hidden = true;
+      resultsHead.hidden = false;
+      keyInfo.hidden = true;
+      note.textContent = "These models came from the master key. Check another key, or run a prompt or timing test on one model.";
+      if (truncated) note.textContent += " Showing the first 40 models.";
+      for (const model of models) {
+        const card = createCard(model);
+        results.append(card);
+        cards.set(model.id, card);
+      }
+      checkButton.disabled = busy || models.length === 0;
+      renderSummary();
+    }
+
+    function setCard(id, update) {
+      const card = cards.get(id);
+      if (!card) return;
+      const access = update.access || card.dataset.access || "queued";
+      card.dataset.access = access;
+      const pill = card.querySelector(".pill");
+      pill.dataset.access = access;
+      pill.textContent = ACCESS_LABEL[access] || access;
+
+      const bits = [];
+      if (update.kind) bits.push(update.kind === "embedding" ? "Embedding" : "Chat");
+      if (update.latency_ms != null) bits.push(formatMs(update.latency_ms));
+      if (update.usage && update.usage.input_tokens != null) bits.push(`in ${update.usage.input_tokens}`);
+      if (update.usage && update.usage.output_tokens != null) bits.push(`out ${update.usage.output_tokens}`);
+      card.querySelector(".timing").textContent = bits.join(" · ");
+
+      const body = card.querySelector(".body");
+      if (access === "listed") {
+        body.hidden = true;
+        body.textContent = "";
+      } else if (access === "checking") {
+        body.hidden = false;
+        body.textContent = "Checking this key’s model list…";
+      } else if (access === "running") {
+        body.hidden = false;
+        body.textContent = "Sending the sample prompt…";
+      } else if (access === "allowed") {
+        body.hidden = false;
+        body.textContent = update.response || "";
+      } else {
+        body.hidden = false;
+        const prefix = update.http_status ? `${update.http_status} · ` : "";
+        body.textContent = prefix + (update.error || "Request failed");
+      }
+
+      const reported = card.querySelector(".reported");
+      if (update.reported_model) {
+        reported.hidden = false;
+        reported.textContent = `Proxy reported model: ${update.reported_model}`;
+      } else if (access === "listed" || access === "checking" || access === "running") {
+        reported.hidden = true;
+        reported.textContent = "";
+      }
+      const saved = { access };
+      for (const field of ["response", "error", "latency_ms", "usage", "kind", "reported_model", "http_status"]) {
+        if (Object.prototype.hasOwnProperty.call(update, field)) saved[field] = update[field];
+      }
+      remember(modelId(card), saved);
+      renderSummary();
+    }
+
+    function modelId(card) {
+      const node = card.querySelector(".model-id");
+      return node ? node.textContent : "";
+    }
+
+    function remember(id, update) {
+      const current = records.get(id) || { id };
+      Object.assign(current, update);
+      records.set(id, current);
+    }
+
+    function renderSummary() {
+      const counts = { allowed: 0, denied: 0, error: 0, stopped: 0, pending: 0, listed: 0, checking: 0 };
+      for (const card of cards.values()) {
+        const access = card.dataset.access;
+        if (access === "listed") counts.listed += 1;
+        else if (access === "checking" || access === "running") counts.pending += 1;
+        else if (counts[access] != null) counts[access] += 1;
+      }
+      const noun = `${models.length} model${models.length === 1 ? "" : "s"}`;
+      if (counts.listed === models.length) {
+        summary.textContent = `${noun} from the master key`;
+        refreshActions();
+        return;
+      }
+      const parts = [noun, `${counts.allowed} with access`];
+      if (counts.denied) parts.push(`${counts.denied} no access`);
+      if (counts.error) parts.push(`${counts.error} failed`);
+      if (counts.stopped) parts.push(`${counts.stopped} stopped`);
+      if (counts.pending) parts.push(`${counts.pending} still running`);
+      summary.textContent = parts.join(" · ");
+      refreshActions();
+    }
+
+    async function postJSON(path, payload, signal) {
+      let response;
+      try {
+        response = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal,
+        });
+      } catch (error) {
+        if (error.name === "AbortError") throw error;
+        throw new Error("Could not reach the local tester. Start it with python3 server.py and open http://127.0.0.1:8787");
+      }
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("The local tester returned an unreadable response.");
+      }
+      if (!response.ok) {
+        throw new Error((data && data.error) || `Request failed (${response.status})`);
+      }
+      return data;
+    }
+
+    async function mapPool(items, limit, fn) {
+      let cursor = 0;
+      async function worker() {
+        while (cursor < items.length) {
+          const index = cursor;
+          cursor += 1;
+          await fn(items[index], index);
+        }
+      }
+      const size = Math.min(limit, items.length);
+      await Promise.all(Array.from({ length: size }, () => worker()));
+    }
+
+    function markUnfinished(message) {
+      for (const model of models) {
+        const card = cards.get(model.id);
+        if (!card) continue;
+        if (card.dataset.access === "checking" || card.dataset.access === "running") {
+          setCard(model.id, { access: "stopped", error: message });
+        }
+      }
+    }
+
+    function begin(mode) {
+      const id = ++runId;
+      abortController?.abort();
+      const controller = new AbortController();
+      abortController = controller;
+      setBanner("");
+      setBusy(mode);
+      return { id, signal: controller.signal };
+    }
+
+    async function finish(id) {
+      if (id === runId) setBusy(null);
+    }
+
+    async function startList() {
+      const { id, signal } = begin("list");
+      try {
+        await listModels(signal);
+      } finally {
+        await finish(id);
+      }
+    }
+
+    async function startCheck() {
+      const { id, signal } = begin("check");
+      try {
+        await checkAccess(signal);
+      } finally {
+        await finish(id);
+      }
+    }
+
+    async function listModels(signal) {
+      const endpoint = endpointInput.value.trim();
+      const masterKey = masterKeyInput.value.trim();
+      if (!endpoint) {
+        setBanner("Enter the proxy endpoint.");
+        return;
+      }
+      if (!masterKey) {
+        setBanner("Enter the master API key.");
+        return;
+      }
+
+      resultsHead.hidden = true;
+      results.replaceChildren();
+      cards.clear();
+      masterModels = [];
+      models = [];
+      empty.hidden = false;
+      empty.textContent = "Loading models…";
+
+      let catalog;
+      try {
+        catalog = await postJSON("/api/models", { endpoint, token: masterKey }, signal);
+      } catch (error) {
+        if (error.name === "AbortError" || signal.aborted) {
+          empty.hidden = false;
+          empty.textContent = "Stopped before the model list loaded.";
+          return;
+        }
+        empty.hidden = false;
+        empty.textContent = "List models with the master key. Then check another key against that list.";
+        setBanner(error.message);
+        return;
+      }
+
+      const listed = Array.isArray(catalog.models) ? catalog.models : [];
+      renderModels(listed, catalog.truncated);
+      if (!listed.length) note.textContent = "The master key returned an empty model list.";
+    }
+
+    async function checkAccess(signal) {
+      const endpoint = endpointInput.value.trim();
+      const accessKey = accessKeyInput.value.trim();
+      const masterKey = masterKeyInput.value.trim();
+      if (!masterModels.length) {
+        setBanner("List models with the master key first.");
+        return;
+      }
+      if (!accessKey) {
+        setBanner("Upload or paste the key to test.");
+        return;
+      }
+
+      models = masterModels.map(copyModel);
+      records.clear();
+      cards.clear();
+      results.replaceChildren();
+      keyInfo.hidden = true;
+      for (const model of models) {
+        const card = createCard(model);
+        results.append(card);
+        cards.set(model.id, card);
+        setCard(model.id, { access: "checking" });
+      }
+      note.textContent = `Checking ${keyHint(accessKey)} against the master list.`;
+
+      let catalog;
+      try {
+        catalog = await postJSON("/api/models", { endpoint, token: accessKey }, signal);
+      } catch (error) {
+        if (error.name === "AbortError" || signal.aborted) {
+          markUnfinished("Stopped before access was checked.");
+          return;
+        }
+        for (const model of models) setCard(model.id, { access: "listed" });
+        note.textContent = "These models came from the master key. Check another key, or run a prompt or timing test on one model.";
+        setBanner(error.message);
+        return;
+      }
+      if (signal.aborted) {
+        markUnfinished("Stopped before access was checked.");
+        return;
+      }
+
+      const allowed = new Set((catalog.models || []).map((model) => model.id));
+      for (const model of models) {
+        if (allowed.has(model.id)) {
+          setCard(model.id, { access: "allowed", response: "On this key’s list." });
+        } else {
+          setCard(model.id, {
+            access: "denied",
+            error: "This key’s model list does not include this model.",
+          });
+        }
+      }
+      for (const model of catalog.models || []) {
+        if (cards.has(model.id)) continue;
+        const extra = copyModel(model);
+        models.push(extra);
+        const card = createCard(extra);
+        const tag = el("p", "tag", "On this key’s list, and missing from the master list");
+        card.insertBefore(tag, card.querySelector(".card-actions"));
+        results.append(card);
+        cards.set(extra.id, card);
+        setCard(extra.id, { access: "allowed", response: "On this key’s list." });
+      }
+
+      if (masterKey) {
+        try {
+          const info = await postJSON("/api/key-info", {
+            endpoint,
+            master_token: masterKey,
+            key: accessKey,
+          }, signal);
+          const line = formatKeyInfo(info);
+          keyInfo.hidden = !line;
+          keyInfo.textContent = line;
+        } catch (error) {
+          if (error.name === "AbortError" || signal.aborted) return;
+          keyInfo.hidden = true;
+        }
+      }
+    }
+
+    function activeKey() {
+      const accessKey = accessKeyInput.value.trim();
+      if (accessKey) return { token: accessKey, label: keyHint(accessKey) };
+      const master = masterKeyInput.value.trim();
+      if (!master) return null;
+      return { token: master, label: "the master key" };
+    }
+
+    function selectedRuns() {
+      const count = Number(runsInput.value);
+      return count >= 1 && count <= 5 ? count : 3;
+    }
+
+    function formatKeyInfo(info) {
+      if (!info) return "";
+      const bits = [];
+      if (info.alias) bits.push(info.alias);
+      if (info.spend != null) {
+        const spend = `Spend $${Number(info.spend).toFixed(4)}`;
+        bits.push(info.max_budget != null ? `${spend} of $${Number(info.max_budget).toFixed(2)}` : spend);
+      }
+      if (info.rpm_limit != null) bits.push(`${info.rpm_limit} requests/min`);
+      if (info.tpm_limit != null) bits.push(`${info.tpm_limit} tokens/min`);
+      if (info.expires) bits.push(`expires ${info.expires}`);
+      return bits.join(" · ");
+    }
+
+    function formatRange(stat, format) {
+      if (!stat) return "";
+      const min = format(stat.min);
+      const median = format(stat.median);
+      const max = format(stat.max);
+      if (min === max) return median;
+      return `min ${min} · median ${median} · max ${max}`;
+    }
+
+    function statBox(label, value, range) {
+      const box = el("div", "stat");
+      box.append(el("span", "", label), el("b", "", value));
+      if (range) box.append(el("small", "", range));
+      return box;
+    }
+
+    function renderPerf(id, result, keyLabel) {
+      const card = cards.get(id);
+      if (!card) return;
+      const box = card.querySelector(".perf");
+      box.hidden = false;
+      box.replaceChildren();
+      box.append(el("p", "perf-note", `Measured with ${keyLabel}.`));
+      if (!result.summary) {
+        const prefix = result.http_status ? `${result.http_status} · ` : "";
+        box.append(el("p", "body", prefix + (result.error || "Performance test failed.")));
+        remember(id, { perf_error: result.error || "Performance test failed." });
+        return;
+      }
+      const summary = result.summary;
+      const embedding = result.kind === "embedding";
+      if (!embedding && summary.ttft_ms) {
+        box.append(statBox(
+          "Time to first token",
+          formatMs(summary.ttft_ms.median),
+          formatRange(summary.ttft_ms, formatMs),
+        ));
+      }
+      if (summary.total_ms) {
+        box.append(statBox(
+          embedding ? "Embedding latency" : "Total time",
+          formatMs(summary.total_ms.median),
+          formatRange(summary.total_ms, formatMs),
+        ));
+      }
+      if (summary.tokens_per_second) {
+        const formatSpeed = (value) => `${value} tok/s`;
+        box.append(statBox(
+          "Output speed",
+          formatSpeed(summary.tokens_per_second.median),
+          formatRange(summary.tokens_per_second, formatSpeed),
+        ));
+      }
+      const runs = (result.samples || []).map((sample, index) => {
+        if (sample.error) return `run ${index + 1} failed`;
+        if (embedding || sample.ttft_ms == null) return formatMs(sample.total_ms);
+        return `first token ${formatMs(sample.ttft_ms)}`;
+      });
+      if (runs.length) box.append(el("p", "perf-note", `Runs: ${runs.join(", ")}`));
+      if (result.run_error) box.append(el("p", "perf-note", result.run_error));
+      if (!embedding && !result.streamed) {
+        box.append(el("p", "perf-note", "This model did not stream, so time to first token is the full response."));
+      }
+      remember(id, { perf: summary, perf_samples: result.samples });
+      if (result.response) {
+        const body = card.querySelector(".body");
+        const current = body.textContent || "";
+        if (body.hidden || current === "On this key’s list." || card.dataset.access === "listed") {
+          body.hidden = false;
+          body.textContent = result.response;
+          remember(id, { response: result.response });
+        }
+      }
+    }
+
+    async function promptModels(signal, ids) {
+      const endpoint = endpointInput.value.trim();
+      const prompt = promptInput.value.trim();
+      const key = activeKey();
+      if (!key) {
+        setBanner("Enter the master key or a key to test.");
+        return;
+      }
+      if (!prompt) {
+        setBanner("Enter a sample prompt.");
+        return;
+      }
+      const targets = models.filter((model) => ids.includes(model.id));
+      await mapPool(targets, 3, async (model) => {
+        if (signal.aborted) return;
+        setCard(model.id, { access: "running" });
+        try {
+          const result = await postJSON("/api/probe", {
+            endpoint,
+            token: key.token,
+            model: model.id,
+            prompt,
+          }, signal);
+          if (signal.aborted) return;
+          setCard(model.id, result);
+        } catch (error) {
+          if (error.name === "AbortError" || signal.aborted) return;
+          setCard(model.id, { access: "error", error: error.message });
+        }
+      });
+      if (signal.aborted) markUnfinished("Stopped before a response came back.");
+    }
+
+    async function startPrompt(ids) {
+      const { id, signal } = begin("prompt");
+      try {
+        await promptModels(signal, ids);
+      } finally {
+        await finish(id);
+      }
+    }
+
+    async function startPromptAllowed() {
+      const ids = models.filter((model) => {
+        const card = cards.get(model.id);
+        return card && card.dataset.access === "allowed";
+      }).map((model) => model.id);
+      if (!ids.length) {
+        setBanner("Check access first. Prompt runs only for models this key can call.");
+        return;
+      }
+      await startPrompt(ids);
+    }
+
+    async function startRetry() {
+      const ids = models.filter((model) => {
+        const card = cards.get(model.id);
+        return card && (card.dataset.access === "error" || card.dataset.access === "stopped");
+      }).map((model) => model.id);
+      if (!ids.length) return;
+      await startPrompt(ids);
+    }
+
+    async function startPerf(modelIdToTest) {
+      const endpoint = endpointInput.value.trim();
+      const prompt = promptInput.value.trim();
+      const key = activeKey();
+      if (!key) {
+        setBanner("Enter the master key or a key to test.");
+        return;
+      }
+      if (!prompt) {
+        setBanner("Enter a sample prompt.");
+        return;
+      }
+      const model = models.find((item) => item.id === modelIdToTest);
+      const { id, signal } = begin("perf");
+      const measuring = model && isEmbedding(model)
+        ? `Measuring embedding latency with ${key.label}…`
+        : `Measuring time to first token with ${key.label}…`;
+      showPerfPending(modelIdToTest, measuring);
+      try {
+        const result = await postJSON("/api/perf", {
+          endpoint,
+          token: key.token,
+          model: modelIdToTest,
+          prompt,
+          runs: selectedRuns(),
+        }, signal);
+        if (signal.aborted) return;
+        renderPerf(modelIdToTest, result, key.label);
+        if (result.access === "allowed") {
+          setCard(modelIdToTest, {
+            access: "allowed",
+            response: result.response,
+            kind: result.kind,
+            reported_model: result.reported_model,
+          });
+        } else if (result.access) {
+          setCard(modelIdToTest, {
+            access: result.access,
+            error: result.error,
+            http_status: result.http_status,
+          });
+        }
+      } catch (error) {
+        if (error.name === "AbortError" || signal.aborted) {
+          showPerfPending(modelIdToTest, "Stopped before the timing run finished.");
+          return;
+        }
+        showPerfPending(modelIdToTest, error.message);
+      } finally {
+        await finish(id);
+      }
+    }
+
+    function showPerfPending(id, message) {
+      const card = cards.get(id);
+      if (!card) return;
+      const box = card.querySelector(".perf");
+      box.hidden = false;
+      box.replaceChildren(el("p", "perf-note", message));
+    }
+
+    function exportResults() {
+      const payload = {
+        endpoint: endpointInput.value.trim(),
+        exported_at: new Date().toISOString(),
+        models: models.map((model) => ({
+          ...model,
+          ...(records.get(model.id) || {}),
+        })),
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = el("a");
+      link.href = url;
+      link.download = "litellm-model-test.json";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
