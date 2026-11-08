@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 248" role="img" aria-labelledby="title desc">
   <title id="title">What the LiteLLM model tester does</title>
-  <desc id="desc">A master key lists models. If a second key works, one request is sent to every model it can call. One model can still be timed for time to first token, total time, and output speed.</desc>
+  <desc id="desc">A master key lists models. If a second key works, one request is sent to every model it can call, and that check repeats every minute. One model can still be timed for time to first token, total time, and output speed.</desc>
   <rect width="880" height="248" rx="16" fill="#fffcf7"/>
   <text x="24" y="36" fill="#1f1a14" font-family="Avenir Next, Segoe UI, sans-serif" font-size="16" font-weight="700">What this page does</text>
   <g font-family="Avenir Next, Segoe UI, sans-serif" fill="#1f1a14">
@@ -18,7 +18,7 @@
     <text x="318" y="86" font-size="13" font-weight="700" fill="#1f6b4a">2. Another key</text>
     <text x="318" y="112" font-size="13">If the key works, sends</text>
     <text x="318" y="132" font-size="13">one request to each model</text>
-    <text x="318" y="156" font-size="12" fill="#6f675e">Paste or upload the key</text>
+    <text x="318" y="156" font-size="12" fill="#6f675e">Repeats every minute</text>
 
     <path d="M560 117h28" stroke="#1f6b4a" stroke-width="2" fill="none"/>
     <path d="M582 110l8 7-8 7" fill="#1f6b4a"/>

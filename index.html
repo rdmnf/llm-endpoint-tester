@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="referrer" content="no-referrer" />
-  <title>LiteLLM model tester</title>
+  <title>LiteLLM monitor</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231f6b4a'/%3E%3C/svg%3E" />
   <style>
     :root {
@@ -75,7 +75,7 @@
       background: var(--surface);
     }
 
-    form, .panel, .results-head, .card, .banner, .empty {
+    form, .panel, .results-head, .card, .monitor-row, .banner, .empty {
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 16px;
@@ -208,7 +208,7 @@
       font-size: 18px;
     }
 
-    #summary, #note {
+    #summary, #note, #watch {
       margin: 8px 0 0;
       color: var(--muted);
       font-size: 14px;
@@ -376,14 +376,101 @@
 
     #key-info { margin: 8px 0 0; font-size: 14px; }
 
-    .card[data-access="allowed"] {
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-top: 22px;
+    }
+
+    .tabs button { background: transparent; border: 1px solid var(--line); }
+    .tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+    .monitor-head { margin-top: 16px; padding: 16px 18px; }
+
+    #monitor-results {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .monitor-row { padding: 0; overflow: hidden; }
+
+    .monitor-toggle {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: transparent;
+      border: 0;
+      border-radius: 16px;
+      text-align: left;
+    }
+
+    .monitor-toggle .model-id { flex: 1; }
+
+    .monitor-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: none;
+    }
+
+    .uptime { color: var(--muted); font-size: 13px; }
+
+    .timeline-panel { padding: 0 16px 16px; }
+
+    .timeline-caption, .legend, .timeline-axis {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend, .timeline-axis { margin-top: 8px; }
+
+    .legend { display: flex; align-items: center; gap: 6px; }
+
+    .timeline-axis { display: flex; justify-content: space-between; font-size: 12px; }
+
+    .swatch, .tick {
+      display: inline-block;
+      border-radius: 3px;
+    }
+
+    .swatch { width: 10px; height: 10px; }
+    .swatch.up, .tick.up { background: #1f6b4a; }
+    .swatch.down, .tick.down { background: #8d2c22; }
+
+    .timeline {
+      display: flex;
+      gap: 3px;
+      margin-top: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .tick { flex: 0 0 8px; width: 8px; height: 28px; }
+
+    .failures {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: var(--denied-ink);
+      font-size: 13px;
+    }
+
+    .card[data-access="allowed"],
+    .monitor-row[data-access="allowed"] {
       background: #f4fbf7;
       box-shadow: inset 4px 0 0 #1f6b4a;
     }
 
     .card[data-access="denied"],
     .card[data-access="error"],
-    .card[data-access="stopped"] {
+    .card[data-access="stopped"],
+    .monitor-row[data-access="denied"],
+    .monitor-row[data-access="error"],
+    .monitor-row[data-access="stopped"] {
       background: #fdf6f4;
       box-shadow: inset 4px 0 0 #8d2c22;
     }
@@ -412,7 +499,8 @@
       .grid, .card-top { grid-template-columns: 1fr; }
       .card-top { flex-direction: column; }
       .card-meta, .timing { align-items: flex-start; text-align: left; }
-      .actions, .results-toolbar { flex-direction: column; }
+      .actions, .results-toolbar, .monitor-toggle { flex-direction: column; }
+      .monitor-meta { align-items: flex-start; }
       .perf { grid-template-columns: 1fr; }
       header h1 { font-size: 28px; }
     }
@@ -421,12 +509,17 @@
 <body>
   <main class="wrap">
     <header>
-      <h1>LiteLLM model tester</h1>
-      <p>Use a master key to list every model on the proxy. Then upload or paste another key. If that key works, one request is sent to every model it can call, so you can see which endpoints respond.</p>
+      <h1>LiteLLM monitor</h1>
+      <p>Monitoring checks every model once a minute and keeps a timeline of when each one was available. Performance measures time to first token, total time, and output speed.</p>
       <figure class="flow">
-        <img src="/flow.svg" alt="A master key lists models. If a second key works, one request is sent to every model it can call. One model can still be timed for first token, total time, and output speed." />
+        <img src="/flow.svg" alt="A master key lists models. If a second key works, one request is sent to every model it can call, and that check repeats every minute. One model can still be timed for first token, total time, and output speed." />
       </figure>
     </header>
+
+    <div class="tabs" role="tablist" aria-label="Tool">
+      <button id="tab-monitor" type="button" role="tab" aria-selected="true" aria-controls="monitor-view">Monitoring</button>
+      <button id="tab-perf" type="button" role="tab" aria-selected="false" aria-controls="perf-view">Performance</button>
+    </div>
 
     <form id="list-form">
       <div class="grid">
@@ -448,14 +541,14 @@
       </div>
       <div class="actions">
         <button id="stop" type="button" hidden>Stop</button>
-        <button id="list-models" class="primary" type="submit">List models</button>
+        <button id="list-models" class="primary" type="submit" hidden>List models</button>
       </div>
       <p class="hint">The master key is used only to load the model list. It is not saved.</p>
     </form>
 
     <section class="panel" id="check-panel">
-      <h2>Check another key</h2>
-      <p class="hint">Upload a file that contains the key, or paste it. If the key works, the sample prompt is sent once to every model it can call. Time-to-first-token still runs on the model you choose.</p>
+      <h2 id="check-heading">Key to monitor</h2>
+      <p id="check-hint" class="hint">If the key works, every model it can call is checked once a minute. Click a model to see when it was available and when it failed.</p>
         <div class="field check-key">
         <div class="token-row">
           <label for="access-key">Key to test</label>
@@ -477,34 +570,46 @@
         <textarea id="prompt" name="prompt">Hey What's up, which model are you?</textarea>
       </div>
       <div class="actions">
-        <button id="check" class="primary" type="button" disabled>Check access</button>
+        <button id="monitor" class="primary" type="button">Start monitoring</button>
+        <button id="check" class="primary" type="button" disabled hidden>Check access</button>
       </div>
     </section>
 
     <p id="banner" class="banner" hidden role="alert"></p>
-    <p id="empty" class="empty">List models with the master key. Then check another key against that list.</p>
+
+    <section id="monitor-view" role="tabpanel">
+      <p id="monitor-empty" class="empty">Start monitoring to check every model once a minute.</p>
+      <section id="monitor-head" class="results-head monitor-head" hidden>
+        <h2>Availability</h2>
+        <div id="tally" class="tally" hidden>
+          <div class="tally-item working">
+            <b id="count-working">0</b>
+            <span>Working</span>
+          </div>
+          <div class="tally-item broken">
+            <b id="count-broken">0</b>
+            <span>Not working</span>
+          </div>
+          <div id="tally-pending" class="tally-item pending" hidden>
+            <b id="count-pending">0</b>
+            <span>Still checking</span>
+          </div>
+        </div>
+        <p id="summary" aria-live="polite"></p>
+        <p id="watch" hidden></p>
+        <p id="note"></p>
+        <p id="key-info" hidden></p>
+      </section>
+      <div id="monitor-results"></div>
+    </section>
+
+    <section id="perf-view" role="tabpanel" hidden>
+    <p id="empty" class="empty">List models with the master key. Then check another key, or time a single model.</p>
 
     <section id="results-head" class="results-head" hidden>
       <div class="results-toolbar">
         <div>
           <h2>Models</h2>
-          <div id="tally" class="tally" hidden>
-            <div class="tally-item working">
-              <b id="count-working">0</b>
-              <span>Working</span>
-            </div>
-            <div class="tally-item broken">
-              <b id="count-broken">0</b>
-              <span>Not working</span>
-            </div>
-            <div id="tally-pending" class="tally-item pending" hidden>
-              <b id="count-pending">0</b>
-              <span>Still checking</span>
-            </div>
-          </div>
-          <p id="summary" aria-live="polite"></p>
-          <p id="note"></p>
-          <p id="key-info" hidden></p>
         </div>
         <div class="toolbar-actions">
           <label class="runs-label">Requests
@@ -520,6 +625,7 @@
       </div>
     </section>
     <div id="results"></div>
+    </section>
 
     <footer>Runs on this computer at 127.0.0.1. Keys stay in this page and are sent only to the endpoint you enter.</footer>
   </main>
@@ -535,8 +641,18 @@
     const showMasterKey = document.querySelector("#show-master-key");
     const showAccessKey = document.querySelector("#show-access-key");
     const listButton = document.querySelector("#list-models");
+    const monitorButton = document.querySelector("#monitor");
     const checkButton = document.querySelector("#check");
     const stopButton = document.querySelector("#stop");
+    const tabMonitor = document.querySelector("#tab-monitor");
+    const tabPerf = document.querySelector("#tab-perf");
+    const monitorView = document.querySelector("#monitor-view");
+    const perfView = document.querySelector("#perf-view");
+    const monitorEmpty = document.querySelector("#monitor-empty");
+    const monitorHead = document.querySelector("#monitor-head");
+    const monitorResults = document.querySelector("#monitor-results");
+    const checkHeading = document.querySelector("#check-heading");
+    const checkHint = document.querySelector("#check-hint");
     const masterPreview = document.querySelector("#master-key-preview");
     const accessPreview = document.querySelector("#access-key-preview");
     const keyInfo = document.querySelector("#key-info");
@@ -554,6 +670,7 @@
     const countBroken = document.querySelector("#count-broken");
     const countPending = document.querySelector("#count-pending");
     const summary = document.querySelector("#summary");
+    const watchStatus = document.querySelector("#watch");
     const note = document.querySelector("#note");
     const results = document.querySelector("#results");
 
@@ -569,11 +686,25 @@
 
     const cards = new Map();
     const records = new Map();
+    const history = new Map();
+    const monitorRows = new Map();
+    const expanded = new Set();
+    const MAX_SAMPLES = 1440;
     let masterModels = [];
     let models = [];
+    let historyKey = "";
+    let activeTab = "monitor";
+    let monitorRun = false;
+    let recordSerial = 0;
+    const WATCH_MS = 60_000;
     let runId = 0;
     let abortController = null;
     let busy = false;
+    let watching = false;
+    let watchGeneration = 0;
+    let watchTimer = null;
+    let watchCountdown = null;
+    let watchDue = 0;
 
     if (location.protocol === "file:") {
       setBanner("Open this page from the local server: python3 server.py, then http://127.0.0.1:8787");
@@ -601,18 +732,25 @@
         refreshKeyPreviews();
         setBanner(error.message);
       }
+      stopWatch();
     });
 
     listForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      startList();
+      if (activeTab === "monitor") startMonitoring();
+      else startList();
     });
 
+    monitorButton.addEventListener("click", () => startMonitoring());
+    tabMonitor.addEventListener("click", () => applyTab("monitor"));
+    tabPerf.addEventListener("click", () => applyTab("perf"));
+
     checkButton.addEventListener("click", () => {
-      startCheck();
+      startCheck(false);
     });
 
     stopButton.addEventListener("click", () => {
+      stopWatch();
       abortController?.abort();
     });
 
@@ -621,11 +759,25 @@
       refreshKeyPreviews();
       invalidateList();
     });
-    accessKeyInput.addEventListener("input", refreshKeyPreviews);
+    accessKeyInput.addEventListener("input", () => {
+      refreshKeyPreviews();
+      stopWatch();
+    });
 
     promptAllowedButton.addEventListener("click", () => startPromptAllowed());
     retryButton.addEventListener("click", () => startRetry());
     exportButton.addEventListener("click", exportResults);
+    monitorResults.addEventListener("click", (event) => {
+      const button = event.target.closest(".monitor-toggle");
+      if (!button) return;
+      const row = button.closest(".monitor-row");
+      const id = row && row.querySelector(".model-id") && row.querySelector(".model-id").textContent;
+      if (!id) return;
+      if (expanded.has(id)) expanded.delete(id);
+      else expanded.add(id);
+      updateMonitorRow(id);
+    });
+
     results.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-action]");
       if (!button || busy) return;
@@ -644,11 +796,46 @@
     function setBusy(mode) {
       busy = mode !== null;
       listButton.disabled = busy;
+      monitorButton.disabled = busy;
       checkButton.disabled = busy || masterModels.length === 0;
-      stopButton.hidden = !busy;
+      stopButton.hidden = !busy && !watching;
+      stopButton.textContent = busy ? "Stop" : "Stop automatic checks";
       listButton.textContent = mode === "list" ? "Loading…" : "List models";
       checkButton.textContent = mode === "check" ? "Checking…" : "Check access";
+      refreshMonitorButton();
       refreshActions();
+      renderWatch();
+    }
+
+    function refreshMonitorButton() {
+      if (busy) monitorButton.textContent = listButton.textContent === "Loading…" ? "Loading…" : "Checking…";
+      else monitorButton.textContent = watching ? "Check now" : "Start monitoring";
+    }
+
+    function applyTab(tab) {
+      activeTab = tab === "perf" ? "perf" : "monitor";
+      const monitor = activeTab === "monitor";
+      monitorView.hidden = !monitor;
+      perfView.hidden = monitor;
+      listButton.hidden = monitor;
+      checkButton.hidden = monitor;
+      monitorButton.hidden = !monitor;
+      tabMonitor.setAttribute("aria-selected", monitor ? "true" : "false");
+      tabPerf.setAttribute("aria-selected", monitor ? "false" : "true");
+      checkHeading.textContent = monitor ? "Key to monitor" : "Key for performance tests";
+      checkHint.textContent = monitor
+        ? "If the key works, every model it can call is checked once a minute. Click a model to see when it was available and when it failed."
+        : "Check access compares this key with the model list. Prompt and time-to-first-token run on the model you choose.";
+    }
+
+    function clearMonitor() {
+      history.clear();
+      historyKey = "";
+      expanded.clear();
+      monitorRows.clear();
+      monitorResults.replaceChildren();
+      monitorHead.hidden = true;
+      monitorEmpty.hidden = false;
     }
 
     function refreshKeyPreviews() {
@@ -673,7 +860,69 @@
       exportButton.disabled = models.length === 0;
     }
 
+    function stopWatch() {
+      watching = false;
+      watchGeneration += 1;
+      watchDue = 0;
+      if (watchTimer) clearTimeout(watchTimer);
+      watchTimer = null;
+      if (watchCountdown) clearInterval(watchCountdown);
+      watchCountdown = null;
+      renderWatch();
+      refreshMonitorButton();
+      if (!busy) {
+        stopButton.hidden = true;
+        stopButton.textContent = "Stop";
+      }
+    }
+
+    function startWatch() {
+      watching = true;
+      watchGeneration += 1;
+      scheduleWatch(watchGeneration);
+      refreshMonitorButton();
+      stopButton.hidden = false;
+      stopButton.textContent = busy ? "Stop" : "Stop automatic checks";
+    }
+
+    function scheduleWatch(generation) {
+      if (watchTimer) clearTimeout(watchTimer);
+      watchDue = Date.now() + WATCH_MS;
+      watchTimer = setTimeout(() => runScheduledCheck(generation), WATCH_MS);
+      if (!watchCountdown) watchCountdown = setInterval(renderWatch, 1000);
+      renderWatch();
+    }
+
+    async function runScheduledCheck(generation) {
+      watchTimer = null;
+      if (generation !== watchGeneration) return;
+      if (busy) {
+        watchDue = Date.now() + 1000;
+        watchTimer = setTimeout(() => runScheduledCheck(generation), 1000);
+        renderWatch();
+        return;
+      }
+      await startCheck(true);
+    }
+
+    function renderWatch() {
+      if (!watching) {
+        watchStatus.hidden = true;
+        watchStatus.textContent = "";
+        return;
+      }
+      watchStatus.hidden = false;
+      if (!watchTimer) {
+        watchStatus.textContent = "Checking endpoints. The next automatic check starts one minute after this one finishes.";
+        return;
+      }
+      const seconds = Math.max(0, Math.ceil((watchDue - Date.now()) / 1000));
+      const clock = seconds >= 60 ? "1:00" : `0:${String(seconds).padStart(2, "0")}`;
+      watchStatus.textContent = `Checking again every minute. Next check in ${clock}.`;
+    }
+
     function invalidateList() {
+      stopWatch();
       if (busy) return;
       masterModels = [];
       models = [];
@@ -682,6 +931,7 @@
       results.replaceChildren();
       resultsHead.hidden = true;
       keyInfo.hidden = true;
+      clearMonitor();
       empty.hidden = false;
       empty.textContent = "List models with the master key. Then check another key, or time a single model.";
       checkButton.disabled = true;
@@ -859,6 +1109,7 @@
         if (Object.prototype.hasOwnProperty.call(update, field)) saved[field] = update[field];
       }
       remember(modelId(card), saved);
+      if (monitorRun && recordSerial) rememberAvailability(id, access, update, recordSerial);
       renderSummary();
     }
 
@@ -886,7 +1137,10 @@
       if (counts.listed === models.length) {
         tally.hidden = true;
         summary.hidden = false;
-        summary.textContent = `${models.length} model${models.length === 1 ? "" : "s"} from the master key`;
+        summary.textContent = models.length
+          ? `${models.length} model${models.length === 1 ? "" : "s"} from the master key`
+          : "";
+        placeMonitorRows();
         refreshActions();
         return;
       }
@@ -903,6 +1157,7 @@
       summary.hidden = parts.length === 0;
       summary.textContent = parts.join(" · ");
       orderCards();
+      placeMonitorRows();
       refreshActions();
     }
 
@@ -912,6 +1167,144 @@
         return (rank[a.dataset.access] ?? 9) - (rank[b.dataset.access] ?? 9);
       });
       for (const card of ordered) results.append(card);
+    }
+
+    function monitorRank(id) {
+      const card = cards.get(id);
+      const access = card ? card.dataset.access : "listed";
+      const rank = { error: 0, stopped: 1, denied: 2, checking: 3, running: 3, allowed: 4, listed: 5 };
+      return rank[access] ?? 9;
+    }
+
+    function ensureMonitorRow(model) {
+      const existing = monitorRows.get(model.id);
+      if (existing) return existing;
+      const row = el("article", "monitor-row");
+      row.dataset.access = "listed";
+      const toggle = el("button", "monitor-toggle");
+      toggle.type = "button";
+      toggle.setAttribute("aria-expanded", "false");
+      const meta = el("span", "monitor-meta");
+      const pill = el("span", "pill", ACCESS_LABEL.listed);
+      pill.dataset.access = "listed";
+      meta.append(pill, el("span", "uptime", "No checks yet"));
+      toggle.append(el("span", "model-id", model.id), meta);
+      const panel = el("div", "timeline-panel");
+      panel.hidden = true;
+      row.append(toggle, panel);
+      monitorRows.set(model.id, row);
+      return row;
+    }
+
+    function placeMonitorRows() {
+      const seen = new Set(models.map((model) => model.id));
+      for (const [id, row] of [...monitorRows]) {
+        if (seen.has(id)) continue;
+        row.remove();
+        monitorRows.delete(id);
+        expanded.delete(id);
+      }
+      const ordered = [...models].sort((a, b) => monitorRank(a.id) - monitorRank(b.id) || a.id.localeCompare(b.id));
+      for (const model of ordered) {
+        monitorResults.append(ensureMonitorRow(model));
+        updateMonitorRow(model.id);
+      }
+      const hasModels = models.length > 0;
+      monitorEmpty.hidden = hasModels;
+      monitorHead.hidden = !hasModels;
+    }
+
+    function updateMonitorRow(id) {
+      const row = monitorRows.get(id);
+      if (!row) return;
+      const card = cards.get(id);
+      const access = card ? card.dataset.access : "listed";
+      row.dataset.access = access;
+      const pill = row.querySelector(".pill");
+      pill.dataset.access = access;
+      pill.textContent = ACCESS_LABEL[access] || access;
+      const samples = history.get(id) || [];
+      const available = samples.filter((sample) => sample.available).length;
+      row.querySelector(".uptime").textContent = samples.length
+        ? `${available}/${samples.length} available`
+        : "No checks yet";
+      const open = expanded.has(id);
+      row.querySelector(".monitor-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+      const panel = row.querySelector(".timeline-panel");
+      panel.hidden = !open;
+      if (open) fillTimeline(panel, samples);
+    }
+
+    function formatClockTime(ms) {
+      return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function fillTimeline(panel, samples) {
+      panel.replaceChildren();
+      if (!samples.length) {
+        panel.append(el("p", "timeline-caption", "No checks yet. Each minute adds one mark to this timeline."));
+        return;
+      }
+      const available = samples.filter((sample) => sample.available).length;
+      const unavailable = samples.length - available;
+      panel.append(el("p", "timeline-caption", `${samples.length} check${samples.length === 1 ? "" : "s"} · ${available} available · ${unavailable} unavailable`));
+      const legend = el("p", "legend");
+      legend.append(el("span", "swatch up"), document.createTextNode(" Available "), el("span", "swatch down"), document.createTextNode(" Unavailable"));
+      panel.append(legend);
+      const bar = el("div", "timeline");
+      bar.setAttribute("role", "img");
+      bar.setAttribute("aria-label", `${available} available and ${unavailable} unavailable`);
+      for (const sample of samples) {
+        const tick = el("span", sample.available ? "tick up" : "tick down");
+        const when = formatClockTime(sample.at);
+        tick.title = sample.available ? `${when} · Available` : `${when} · Unavailable · ${sample.error || "Request failed"}`;
+        bar.append(tick);
+      }
+      panel.append(bar);
+      const axis = el("p", "timeline-axis");
+      axis.append(el("span", "", formatClockTime(samples[0].at)), el("span", "", formatClockTime(samples[samples.length - 1].at)));
+      panel.append(axis);
+      const failures = samples.filter((sample) => !sample.available);
+      if (!failures.length) {
+        panel.append(el("p", "timeline-caption", "No failures in this timeline."));
+        return;
+      }
+      const recent = failures.slice(-12);
+      const list = el("ul", "failures");
+      for (const sample of recent) {
+        list.append(el("li", "", `${formatClockTime(sample.at)} · ${sample.error || "Unavailable"}`));
+      }
+      panel.append(el("p", "timeline-caption", "Failures"), list);
+      if (failures.length > recent.length) {
+        panel.append(el("p", "timeline-caption", `Showing the latest ${recent.length} of ${failures.length} failures.`));
+      }
+    }
+
+    function rememberAvailability(id, access, update, serial) {
+      if (!["allowed", "denied", "error"].includes(access)) return;
+      const list = history.get(id) || [];
+      const sample = {
+        serial,
+        at: Date.now(),
+        available: access === "allowed",
+        error: access === "allowed" ? "" : (update.error || (access === "denied" ? "Not on this key’s list" : "Request failed")),
+      };
+      const index = list.findIndex((item) => item.serial === serial);
+      if (index === -1) list.push(sample);
+      else {
+        sample.at = list[index].at;
+        list[index] = sample;
+      }
+      if (list.length > MAX_SAMPLES) list.splice(0, list.length - MAX_SAMPLES);
+      history.set(id, list);
+    }
+
+    function discardSerial(serial) {
+      for (const [id, list] of history) {
+        const next = list.filter((item) => item.serial !== serial);
+        if (next.length) history.set(id, next);
+        else history.delete(id);
+      }
     }
 
     async function postJSON(path, payload, signal) {
@@ -977,6 +1370,7 @@
     }
 
     async function startList() {
+      stopWatch();
       const { id, signal } = begin("list");
       try {
         await listModels(signal);
@@ -985,13 +1379,50 @@
       }
     }
 
-    async function startCheck() {
-      const { id, signal } = begin("check");
-      try {
-        await checkAccess(signal);
-      } finally {
-        await finish(id);
+    async function startMonitoring() {
+      if (busy) return;
+      if (!endpointInput.value.trim() || !masterKeyInput.value.trim()) {
+        setBanner("Enter the endpoint and the master API key.");
+        return;
       }
+      if (!accessKeyInput.value.trim()) {
+        setBanner("Upload or paste the key to monitor.");
+        return;
+      }
+      if (!promptInput.value.trim()) {
+        setBanner("Enter a sample prompt. It is sent once a minute to every model the key can call.");
+        return;
+      }
+      if (!masterModels.length) {
+        await startList();
+        if (!masterModels.length) return;
+      }
+      await startCheck(true);
+    }
+
+    async function startCheck(watch) {
+      const generationAtStart = watchGeneration;
+      const { id, signal } = begin("check");
+      if (watch) recordSerial = id;
+      let status = "failed";
+      try {
+        monitorRun = Boolean(watch);
+        status = await checkAccess(signal);
+      } finally {
+        if (status !== "ok") discardSerial(id);
+        if (id === runId) {
+          recordSerial = 0;
+          monitorRun = false;
+          await finish(id);
+        }
+      }
+      if (id !== runId) return;
+      if (status === "stopped") return;
+      if (watch && status !== "ok") {
+        stopWatch();
+        return;
+      }
+      if (status === "ok" && (watch || watching) && generationAtStart === watchGeneration) startWatch();
     }
 
     async function listModels(signal) {
@@ -1040,15 +1471,23 @@
       const masterKey = masterKeyInput.value.trim();
       if (!masterModels.length) {
         setBanner("List models with the master key first.");
-        return;
+        return "failed";
       }
       if (!accessKey) {
         setBanner("Upload or paste the key to test.");
-        return;
+        return "failed";
       }
       if (!promptInput.value.trim()) {
         setBanner("Enter a sample prompt. It is sent once to every model the key can call.");
-        return;
+        return "failed";
+      }
+      if (monitorRun) {
+        const clean = stripBearer(accessKey);
+        if (historyKey !== clean) {
+          history.clear();
+          expanded.clear();
+          historyKey = clean;
+        }
       }
 
       models = masterModels.map(copyModel);
@@ -1070,16 +1509,16 @@
       } catch (error) {
         if (error.name === "AbortError" || signal.aborted) {
           markUnfinished("Stopped before access was checked.");
-          return;
+          return "stopped";
         }
         for (const model of models) setCard(model.id, { access: "listed" });
         note.textContent = "These models came from the master key. Check another key, or run a prompt or timing test on one model.";
         setBanner(error.message);
-        return;
+        return "failed";
       }
       if (signal.aborted) {
         markUnfinished("Stopped before access was checked.");
-        return;
+        return "stopped";
       }
 
       const allowed = new Set((catalog.models || []).map((model) => model.id));
@@ -1116,11 +1555,11 @@
           keyInfo.hidden = !line;
           keyInfo.textContent = line;
         } catch (error) {
-          if (error.name === "AbortError" || signal.aborted) return;
+          if (error.name === "AbortError" || signal.aborted) return "stopped";
           keyInfo.hidden = true;
         }
       }
-      if (signal.aborted) return;
+      if (signal.aborted) return "stopped";
 
       const allowedIds = models.filter((model) => {
         const card = cards.get(model.id);
@@ -1128,15 +1567,15 @@
       }).map((model) => model.id);
       if (!allowedIds.length) {
         note.textContent = `${keyHint(accessKey)} works, and it cannot call any model on this list.`;
-        return;
+        return "ok";
       }
       const countLabel = `${allowedIds.length} model${allowedIds.length === 1 ? "" : "s"}`;
       note.textContent = `${keyHint(accessKey)} works. Sending one request to ${countLabel}.`;
       checkButton.textContent = "Testing endpoints…";
       await promptModels(signal, allowedIds);
-      if (!signal.aborted) {
-        note.textContent = `${keyHint(accessKey)} was checked with one request to each model it can call.`;
-      }
+      if (signal.aborted) return "stopped";
+      note.textContent = `${keyHint(accessKey)} was checked with one request to each model it can call.`;
+      return "ok";
     }
 
     function activeKey() {
@@ -1404,6 +1843,8 @@
       link.remove();
       URL.revokeObjectURL(url);
     }
+
+    applyTab("monitor");
   </script>
 </body>
 </html>
